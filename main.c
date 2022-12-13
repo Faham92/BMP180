@@ -26,16 +26,16 @@
 #define BMP180_ULTRA_HIGH_RES   3
 
 #define BMP180_CAL_AC1          0xAA  // Calibration data (16 bits)
-#define BMP180_CAL_AC2          0xAC  // Calibration data (16 bits)
-#define BMP180_CAL_AC3          0xAE  // Calibration data (16 bits)
-#define BMP180_CAL_AC4          0xB0  // Calibration data (16 bits)
-#define BMP180_CAL_AC5          0xB2  // Calibration data (16 bits)
-#define BMP180_CAL_AC6          0xB4  // Calibration data (16 bits)
-#define BMP180_CAL_B1           0xB6  // Calibration data (16 bits)
-#define BMP180_CAL_B2           0xB8  // Calibration data (16 bits)
-#define BMP180_CAL_MB           0xBA  // Calibration data (16 bits)
-#define BMP180_CAL_MC           0xBC  // Calibration data (16 bits)
-#define BMP180_CAL_MD           0xBE  // Calibration data (16 bits)
+#define BMP180_CAL_AC2          0xAC  
+#define BMP180_CAL_AC3          0xAE  
+#define BMP180_CAL_AC4          0xB0  
+#define BMP180_CAL_AC5          0xB2  
+#define BMP180_CAL_AC6          0xB4 
+#define BMP180_CAL_B1           0xB6  
+#define BMP180_CAL_B2           0xB8 
+#define BMP180_CAL_MB           0xBA  
+#define BMP180_CAL_MC           0xBC  
+#define BMP180_CAL_MD           0xBE  
 
 #define BMP180_CONTROL             0xF4  // Control register
 #define BMP180_DATA_TO_READ        0xF6  // Read results here
@@ -54,15 +54,15 @@ static int16_t b2;
 static int16_t mb;
 static int16_t mc;
 static int16_t md;
-static uint8_t oversampling = BMP180_HIGH_RES  ; //configure le capteur en mode ultra low power
+static uint8_t oversampling = BMP180_HIGH_RES  ;
 
 
 RTC_DATA_ATTR int bootCount = 0;
 
 //déclaration des fonctions
-static esp_err_t bmp180_master_write_slave(i2c_port_t i2c_num, uint8_t* data_wr, size_t size);
+static esp_err_t bmp180_master_write(i2c_port_t i2c_num, uint8_t* data_wr, size_t size);
 static esp_err_t bmp180_write_reg(i2c_port_t i2c_num, uint8_t reg, uint8_t cmd);
-static esp_err_t bmp180_master_read_slave(i2c_port_t i2c_num, uint8_t* data_rd, size_t size);
+static esp_err_t bmp180_master_read(i2c_port_t i2c_num, uint8_t* data_rd, size_t size);
 esp_err_t bmp180_init(int pin_sda, int pin_scl);
 static esp_err_t bmp180_read_uncompensated_temperature(int16_t* temp);
 static void read_tempeature(float *value, int32_t);
@@ -104,9 +104,9 @@ void app_main()
  }
 
 
-static esp_err_t bmp180_master_write_slave(i2c_port_t i2c_num, uint8_t* data_wr, size_t size)
+static esp_err_t bmp180_master_write(i2c_port_t i2c_num, uint8_t* data_wr, size_t size)
 {
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();  //initialise commande i2c
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();  
     i2c_master_start(cmd);  
     i2c_master_write_byte(cmd, BMP180_W, ACK_CHECK_EN);
     i2c_master_write(cmd,data_wr, size, ACK_CHECK_EN);
@@ -120,7 +120,7 @@ static esp_err_t bmp180_master_write_slave(i2c_port_t i2c_num, uint8_t* data_wr,
 static esp_err_t bmp180_write_reg(i2c_port_t i2c_num, uint8_t reg, uint8_t cmd)
 {
     uint8_t data_wr[] = {reg, cmd};
-    esp_err_t err = bmp180_master_write_slave(i2c_num, data_wr, 2);
+    esp_err_t err = bmp180_master_write(i2c_num, data_wr, 2);
     if (err != ESP_OK) {
         ESP_LOGI("[TAG]", "Write [0x%02x] = 0x%02x failed, err = %d", data_wr[0], data_wr[1], err);
     }
@@ -128,7 +128,7 @@ static esp_err_t bmp180_write_reg(i2c_port_t i2c_num, uint8_t reg, uint8_t cmd)
 }
 
 
-static esp_err_t bmp180_master_read_slave(i2c_port_t i2c_num, uint8_t* data_rd, size_t size)
+static esp_err_t bmp180_master_read(i2c_port_t i2c_num, uint8_t* data_rd, size_t size)
 {
     if (size == 0) {
         return ESP_OK;
@@ -139,7 +139,7 @@ static esp_err_t bmp180_master_read_slave(i2c_port_t i2c_num, uint8_t* data_rd, 
     if (size > 1) {
         i2c_master_read(cmd, data_rd, size - 1, ACK_VAL);
     }
-    i2c_master_read_byte(cmd, data_rd + size -1, NACK_VAL); //revoir cette étape
+    i2c_master_read_byte(cmd, data_rd + size -1, NACK_VAL);
     i2c_master_stop(cmd);
     esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 200 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
@@ -148,10 +148,10 @@ static esp_err_t bmp180_master_read_slave(i2c_port_t i2c_num, uint8_t* data_rd, 
 
 static esp_err_t bmp180_read_int16(i2c_port_t i2c_num, uint8_t reg, int16_t* value)
 {
-    esp_err_t err = bmp180_master_write_slave(i2c_num, &reg, 1);
+    esp_err_t err = bmp180_master_write(i2c_num, &reg, 1);
     if (err == ESP_OK) {
         uint8_t data_rd[2] = {0};
-        err = bmp180_master_read_slave(i2c_num, data_rd, 2);
+        err = bmp180_master_read(i2c_num, data_rd, 2);
         if (err == ESP_OK) {
             *value = (int16_t) ((data_rd[0] << 8) | data_rd[1]);
         }
@@ -164,10 +164,10 @@ static esp_err_t bmp180_read_int16(i2c_port_t i2c_num, uint8_t reg, int16_t* val
 
 static esp_err_t bmp180_read_uint16(i2c_port_t i2c_num, uint8_t reg, uint16_t* value)
 {
-    esp_err_t err = bmp180_master_write_slave(i2c_num, &reg, 1);
+    esp_err_t err = bmp180_master_write(i2c_num, &reg, 1);
     if (err == ESP_OK) {
         uint8_t data_rd[2] = {0};
-        err = bmp180_master_read_slave(i2c_num, data_rd, 2);
+        err = bmp180_master_read(i2c_num, data_rd, 2);
         if (err == ESP_OK) {
             *value = (uint16_t) ((data_rd[0] << 8) | data_rd[1]);
         }
@@ -181,10 +181,10 @@ static esp_err_t bmp180_read_uint16(i2c_port_t i2c_num, uint8_t reg, uint16_t* v
 
 static esp_err_t bmp180_read_uint32(i2c_port_t i2c_num, uint8_t reg, uint32_t* value)
 {
-    esp_err_t err = bmp180_master_write_slave(i2c_num, &reg, 1);
+    esp_err_t err = bmp180_master_write(i2c_num, &reg, 1);
     if (err == ESP_OK) {
         uint8_t data_rd[3] = {0};
-        err = bmp180_master_read_slave(i2c_num, data_rd, 3);
+        err = bmp180_master_read(i2c_num, data_rd, 3);
         if (err == ESP_OK) {
             *value = (uint32_t) ((data_rd[0] << 16) | (data_rd[1] << 8) | data_rd[2]);
         }
@@ -306,7 +306,7 @@ esp_err_t bmp180_init(int pin_sda, int pin_scl)
 {
     esp_err_t err;
 
-    i2c_config_t conf;                                    //initialisation de l'i2c au niveau hardware
+    i2c_config_t conf;                                    //I2C config
     conf.mode = I2C_MODE_MASTER;
     conf.sda_io_num = pin_sda;
     conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
@@ -315,7 +315,7 @@ esp_err_t bmp180_init(int pin_sda, int pin_scl)
     conf.master.clk_speed = 100000;
     conf.clk_flags = 0;
 
-    err = i2c_param_config(I2C_NUM_0, &conf);              //configuration des paramètres
+    err = i2c_param_config(I2C_NUM_0, &conf);              
     if (err != ESP_OK) {
         ESP_LOGE("[INI_ERROR]", "I2C driver configuration failed with error = %d", err);
         
@@ -328,37 +328,42 @@ esp_err_t bmp180_init(int pin_sda, int pin_scl)
     ESP_LOGI("[INI_SUCCESS]", "I2C master driver has been installed.");
 
     uint8_t reg = 0x00;
-    err = bmp180_master_write_slave(I2C_NUM_0, &reg, 1); // on test si l'ESP détecte le BMP en envoyant l'adresse 0x00 dedans
+    err = bmp180_master_write(I2C_NUM_0, &reg, 1); 
 
     if (err != ESP_OK) {
         ESP_LOGE("[INI_ERROR]", "BMP180 sensor not found at 0x%02x", BMP180_ADDRESS);
         
     }
-    else {
 
-    ESP_LOGI("[I2C_SUCCESS]", "BMP180 sensor found at 0x%02x", BMP180_ADDRESS);
-    err  = bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC1, &ac1);
-    err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC2, &ac2);
-    err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC3, &ac3);
-    err |= bmp180_read_uint16(I2C_NUM_0, BMP180_CAL_AC4, &ac4);
-    err |= bmp180_read_uint16(I2C_NUM_0, BMP180_CAL_AC5, &ac5);
-    err |= bmp180_read_uint16(I2C_NUM_0, BMP180_CAL_AC6, &ac6);
-    err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_B1, &b1);
-    err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_B2, &b2);
-    err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_MB, &mb);
-    err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_MC, &mc);
-    err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_MD, &md);
+    else {
+    
+            ESP_LOGI("[I2C_SUCCESS]", "BMP180 sensor found at 0x%02x", BMP180_ADDRESS);
+            err  = bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC1, &ac1);
+            err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC2, &ac2);
+            err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC3, &ac3);
+            err |= bmp180_read_uint16(I2C_NUM_0, BMP180_CAL_AC4, &ac4);
+            err |= bmp180_read_uint16(I2C_NUM_0, BMP180_CAL_AC5, &ac5);
+            err |= bmp180_read_uint16(I2C_NUM_0, BMP180_CAL_AC6, &ac6);
+            err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_B1, &b1);
+            err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_B2, &b2);
+            err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_MB, &mb);
+            err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_MC, &mc);
+            err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_MD, &md);
 
     
-    ESP_LOGI("[INI_SUCCESS]", "AC1: %d, AC2: %d, AC3: %d, AC4: %d, AC5: %d, AC6: %d", ac1, ac2, ac3, ac4, ac5, ac6);
-    ESP_LOGI("[INI_SUCCESS]", "B1: %d, B2: %d, MB: %d, MC: %d, MD: %d", b1, b2, mb, mc, md);
-    }
+             ESP_LOGI("[INI_SUCCESS]", "AC1: %d, AC2: %d, AC3: %d, AC4: %d, AC5: %d, AC6: %d", ac1, ac2, ac3, ac4, ac5, ac6);
+             ESP_LOGI("[INI_SUCCESS]", "B1: %d, B2: %d, MB: %d, MC: %d, MD: %d", b1, b2, mb, mc, md);
+         }
     return ESP_OK;
 }
 
 
+    
 
-void print_wakeup_reason(){
+
+
+void print_wakeup_reason()
+{
   esp_sleep_wakeup_cause_t wakeup_reason;
 
   wakeup_reason = esp_sleep_get_wakeup_cause();
