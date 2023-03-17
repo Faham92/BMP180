@@ -5,6 +5,7 @@
 #include "driver/i2c.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
+#include "esp_timer.h"
 
 
 
@@ -42,6 +43,9 @@
 #define BMP180_READ_TEMP_CMD       0x2E  // Request temperature measurement
 #define BMP180_READ_PRESSURE_CMD   0xB4  // Request pressure measurement
 
+#define TEMPS_MICRO_MIN  60000000                     //nombre de micro seconde dans 1min
+#define time             1* TEMPS_MICRO_MIN/2           //definit la durée d'acquisition
+
 // Calibration parameters
 static int16_t ac1;
 static int16_t ac2;
@@ -54,53 +58,57 @@ static int16_t b2;
 static int16_t mb;
 static int16_t mc;
 static int16_t md;
-static uint8_t oversampling = BMP180_HIGH_RES  ;
+static uint8_t oversampling = BMP180_ULTRA_LOW_POWER;
 
-
-RTC_DATA_ATTR int bootCount = 0;
+//initialisation arguments pour le timer 
+esp_timer_create_args_t create_args;
+esp_timer_handle_t handle;
 
 //déclaration des fonctions
 static esp_err_t bmp180_master_write(i2c_port_t i2c_num, uint8_t* data_wr, size_t size);
 static esp_err_t bmp180_write_reg(i2c_port_t i2c_num, uint8_t reg, uint8_t cmd);
 static esp_err_t bmp180_master_read(i2c_port_t i2c_num, uint8_t* data_rd, size_t size);
-esp_err_t bmp180_init(int pin_sda, int pin_scl);
+esp_err_t bmp180_init();
 static esp_err_t bmp180_read_uncompensated_temperature(int16_t* temp);
 static void read_tempeature(float *value, int32_t);
 static esp_err_t bmp180_calculate_b5(int32_t* b5);
 static uint32_t bmp180_read_uncompensated_pressure(uint32_t* up);
 static void read_pressure(int32_t *value, int32_t);
 void print_wakeup_reason();
-
+static void call_sleep (void);
 
 
 
 
 void app_main()
 {   
+   /* const esp_timer_create_args_t create_args = {
+            .callback = &call_sleep,
+            .arg = NULL,
+            .name = "create",
+    };
+     esp_timer_init();//initialisation du timer
+    esp_timer_create(&create_args,&handle); // on instancie le timer
+    esp_timer_start_once(handle,time);// création du timer */
     float temperature;
     int32_t pression,b5;
     esp_err_t test;
-    int time = 40 ; 
-    vTaskDelay(pdMS_TO_TICKS(10000)); // delai avant affichage des données et l'initialisation de l'i2c
-    bmp180_init(SDA, SCL);
+    
+    vTaskDelay(pdMS_TO_TICKS(1000)); // delai avant affichage des données et l'initialisation de l'i2c
+    bmp180_init();
     print_wakeup_reason();
-    esp_sleep_enable_timer_wakeup(time * 1000000); //temporisation en secondes (*1000000 car le temps est en micro seconde dans la fonction timer_wake_up)
-        while(1)
-        {
-            bootCount++;
-           test = bmp180_calculate_b5(&b5);
+    esp_sleep_enable_timer_wakeup(time); //temporisation en minutes (*60000000 car le temps est en micro seconde dans la fonction timer_wake_up)
+      // while(1)
+        //{  
+            test = bmp180_calculate_b5(&b5);
             read_tempeature(&temperature,b5);
             read_pressure(&pression,b5);
             ESP_LOGE("[MAIN]","La température est de %f °C",temperature);
             ESP_LOGE("[MAIN]","La pression est de %d hPa",pression);
-            vTaskDelay(pdMS_TO_TICKS(2000));  
-            if(bootCount %10 == 0)
-             {
-                ESP_LOGE("[MAIN]","Going to sleep now\r\n");
-                esp_deep_sleep_start();
-             }      
-          
-        } 
+            //vTaskDelay(pdMS_TO_TICKS(2000));
+            call_sleep();          
+       //}
+       
  }
 
 
@@ -111,7 +119,7 @@ static esp_err_t bmp180_master_write(i2c_port_t i2c_num, uint8_t* data_wr, size_
     i2c_master_write_byte(cmd, BMP180_W, ACK_CHECK_EN);
     i2c_master_write(cmd,data_wr, size, ACK_CHECK_EN);
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 200 / portTICK_RATE_MS);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 200 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     return ret;
 }
@@ -141,7 +149,7 @@ static esp_err_t bmp180_master_read(i2c_port_t i2c_num, uint8_t* data_rd, size_t
     }
     i2c_master_read_byte(cmd, data_rd + size -1, NACK_VAL);
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 200 / portTICK_RATE_MS);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 200 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     return ret;
 }
@@ -302,42 +310,42 @@ static void read_pressure(int32_t *value, int32_t b5)
     
 }
 
-esp_err_t bmp180_init(int pin_sda, int pin_scl)
+esp_err_t bmp180_init()
 {
     esp_err_t err;
 
-    i2c_config_t conf;                                    //I2C config
-    conf.mode = I2C_MODE_MASTER;
-    conf.sda_io_num = pin_sda;
-    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_io_num = pin_scl;
-    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.master.clk_speed = 100000;
-    conf.clk_flags = 0;
-
-    err = i2c_param_config(I2C_NUM_0, &conf);              
+    i2c_config_t conf = {                                    //Configuration des pins i2c
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = GPIO_NUM_21,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_io_num = GPIO_NUM_22,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = 100000,
+        .clk_flags = 0,
+    };
+    err = i2c_param_config(I2C_NUM_0, &conf);             
     if (err != ESP_OK) {
         ESP_LOGE("[INI_ERROR]", "I2C driver configuration failed with error = %d", err);
         
     }
-    i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);  //install le driver i2c
+    i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);  //installation du driver i2c
     if (err != ESP_OK) {
         ESP_LOGE("[INI_ERROR]", "I2C driver installation failed with error = %d", err);
        
-    }
+    }else {
     ESP_LOGI("[INI_SUCCESS]", "I2C master driver has been installed.");
-
-    uint8_t reg = 0x00;
+    }
+    uint8_t reg = 0x71;
     err = bmp180_master_write(I2C_NUM_0, &reg, 1); 
 
     if (err != ESP_OK) {
-        ESP_LOGE("[INI_ERROR]", "BMP180 sensor not found at 0x%02x", BMP180_ADDRESS);
+        ESP_LOGE("[INI_ERROR]", "sensor not found at 0x%02x", reg);
         
     }
 
     else {
     
-            ESP_LOGI("[I2C_SUCCESS]", "BMP180 sensor found at 0x%02x", BMP180_ADDRESS);
+            ESP_LOGI("[I2C_SUCCESS]", " sensor found at 0x%02x", BMP180_ADDRESS);
             err  = bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC1, &ac1);
             err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC2, &ac2);
             err |= bmp180_read_int16(I2C_NUM_0, BMP180_CAL_AC3, &ac3);
@@ -370,12 +378,15 @@ void print_wakeup_reason()
 
   switch(wakeup_reason)
   {
-    case ESP_SLEEP_WAKEUP_EXT0 : ESP_LOGI("[wakeup]","Wakeup caused by external signal using RTC_IO\r\n"); break;
-    case ESP_SLEEP_WAKEUP_EXT1 : ESP_LOGI("[wakeup]","Wakeup caused by external signal using RTC_CNTL\r\n"); break;
     case ESP_SLEEP_WAKEUP_TIMER : ESP_LOGI("[wakeup]","Wakeup caused by timer\r\n"); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD : ESP_LOGI("[wakeup]","Wakeup caused by touchpad\r\n"); break;
-    case ESP_SLEEP_WAKEUP_ULP : ESP_LOGI("[wakeup]","Wakeup caused by ULP program\r\n"); break;
-    default : ESP_LOGI("[wakeup]","Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
-    
+    default : ESP_LOGI("[wakeup]","Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break; 
   }
+}
+
+
+static void call_sleep()
+{
+    
+    ESP_LOGE("[MAIN]","Going to sleep now\r\n");
+    esp_deep_sleep_start();
 }
